@@ -33,37 +33,51 @@ class SpectralNormalization(layers.Layer):
         width = tf.reshape(w, shape=(height, -1)).shape[1]
 
         u = tf.random.normal(shape=[1, height])
-        v = tf.random.normal(shape=[1, width])
-        self.u = l2normalize(u)
-        self.v = l2normalize(v)
+        print(u)
+        v = tf.random.normal(shape=[1, width])        
+        self.u = tf.Variable(l2normalize(u), name='sn_u', trainable=False)
+        print(u)
+        self.v = tf.Variable(l2normalize(v), name='sn_v', trainable=False)
 
     def build(self, input_shape):
+        print("sn build", self.module.built)
         self.module.build(input_shape)
         if not self._check_param():
             self._make_param()
+        print('build done')
         
     def call(self, x, training=None):
+        print('sn call', x, tf.executing_eagerly())
         if training:
             self.update_uv()
         return self.module.call(x)
 
-    @tf.function
+    #@tf.function
     def update_uv(self):
         """ Spectrally Normalized Weight
         """
+        print('sn update_uv')
         W = getattr(self.module, self.weight_name)[0]
+        print('W', type(W), W)
+        print('u', type(self.u), self.u)
         W_mat = tf.reshape(W, [W.shape[-1], -1])
+        print('u', self.u)
+        u = self.u
+        v = self.v
 
         for _ in range(self.Ip):
-            self.v = l2normalize(tf.matmul(self.u, W_mat))
-            self.u = l2normalize(tf.matmul(self.v, tf.transpose(W_mat)))
-            
-        sigma = tf.reduce_sum(tf.matmul(self.u, W_mat) * self.v)
+            v = l2normalize(tf.matmul(u, W_mat))
+            print('u2', self.u)
+            u = l2normalize(tf.matmul(v, tf.transpose(W_mat)))
+            print('u3', self.u)
+                       
+        sigma = tf.reduce_sum(tf.matmul(u, W_mat) * v)
 
 
         if self.factor:
             sigma = sigma / self.factor
-
+        self.u.assign(u)
+        self.v.assign(v)
         W.assign(W / sigma)
 
 
@@ -116,5 +130,5 @@ class AttentionLayer(layers.Layer):
         # atten_g = self.conv[3](atten_g)
         # return layers.add([(1-self.sigma) * inputs, self.sigma * atten_g])
         return layers.add([inputs, self.sigma * atten_g])
-        
+
 
